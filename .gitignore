@@ -1,0 +1,6 @@
+.env
+.venv/
+venv/
+.idea/
+bot.db
+__pycache__/
