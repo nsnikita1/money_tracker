@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from db import init_db, add_expense, get_month_total, get_history
 from utils import parse_amount, parse_date, format_money
+from db import init_db, add_expense, get_month_total, get_history, count_today
 
 load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
@@ -29,6 +30,11 @@ async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+
+    if count_today(user_id) >= 50:
+        await update.message.reply_text('Лимит трат на сегодня исчерпан (50)')
+        return
+
     args = context.args
     if len(args) < 2:
         await update.message.reply_text('Формат: /add 500 еда обед')

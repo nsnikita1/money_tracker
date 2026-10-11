@@ -50,3 +50,13 @@ def get_history(user_id, date_str):
             'WHERE user_id = ? AND created_at LIKE ? ORDER BY created_at',
             (user_id, date_str + '%'),
         ).fetchall()
+
+def count_today(user_id):
+    prefix = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '%'
+    with get_connection() as conn:
+        row = conn.execute(
+            'SELECT COUNT(*) FROM expenses '
+            'WHERE user_id = ? AND created_at LIKE ?',
+            (user_id, prefix),
+        ).fetchone()
+    return row[0]
