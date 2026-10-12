@@ -1,12 +1,12 @@
 import os
+import logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from db import init_db, add_expense, get_month_total, get_history
 from utils import parse_amount, parse_date, format_money
 from db import init_db, add_expense, get_month_total, get_history, count_today
-import logging
+
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(name)s: %(message)s', level=logging.INFO)
 logging.getLogger('httpx').setLevel(logging.WARNING)
@@ -83,6 +83,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(line)
     await update.message.reply_text(f'Траты за {date_str}:\n' + '\n'.join(lines))
 
+
 async def on_error(update, context):
     logging.error('Ошибка в обработчике', exc_info=context.error)
 
@@ -95,7 +96,7 @@ def main():
     app.add_handler(CommandHandler('add', add))
     app.add_handler(CommandHandler('month', month))
     app.add_handler(CommandHandler('history', history))
-    app.add.error_handler(on_error)
+    app.add_error_handler(on_error)
     app.run_polling()
 
 
