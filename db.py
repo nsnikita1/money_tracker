@@ -1,65 +1,84 @@
 import os
-import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import psycopg
 from dotenv import load_dotenv
 
 load_dotenv()
-DB_NAME = os.getenv('DB_PATH', 'bot.db')
 
 
 def get_connection():
-    return sqlite3.connect(DB_NAME)
+    return psycopg.connect(os.environ['DATABASE_URL'])
 
 
 def init_db():
     with get_connection() as conn:
         conn.execute('''
             CREATE TABLE IF NOT EXISTS expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                amount INTEGER NOT NULL,
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                amount BIGINT NOT NULL,
                 category TEXT NOT NULL,
                 comment TEXT,
-                created_at TEXT NOT NULL
+                created_at TIMESTAMPTZ NOT NULL
             )
         ''')
-
-
-def add_expense(user_id, amount, category, comment=''):
-    created_at = datetime.now(timezone.utc).isoformat()
-    with get_connection() as conn:
         conn.execute(
-            'INSERT INTO expenses (user_id, amount, category, comment, created_at) '
-            'VALUES (?, ?, ?, ?, ?)',
-            (user_id, amount, category, comment, created_at),
+            'CREATE INDEX IF NOT EXISTS idx_expenses_user_date '
+            'ON expenses (user_id, created_at)'
         )
 
 
+def add_expense(user_id, amount, category, comment=''):
+    with get_connection() as conn:
+        conn.execute(
+            'INSERT INTO expenses (user_id, amount, category, comment, created_at) '
+            'VALUES (%s, %s, %s, %s, %s)',
+            (user_id, amount, category, comment, datetime.now(timezone.utc)),
+        )
+
+
+def month_range(now=None):
+    now = now or datetime.now(timezone.utc)
+    start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    if now.month == 12:
+        end = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+    return start, end
+
+
 def get_month_total(user_id):
-    prefix = datetime.now(timezone.utc).strftime('%Y-%m') + '%'
+    start, end = month_range()
     with get_connection() as conn:
         row = conn.execute(
             'SELECT COALESCE(SUM(amount), 0) FROM expenses '
-            'WHERE user_id = ? AND created_at LIKE ?',
-            (user_id, prefix),
+            'WHERE user_id = %s AND created_at >= %s AND created_at < %s',
+            (user_id, start, end),
         ).fetchone()
-    return row[0]
+    return int(row[0])
 
 
 def get_history(user_id, date_str):
+    start = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
     with get_connection() as conn:
         return conn.execute(
             'SELECT amount, category, comment, created_at FROM expenses '
-            'WHERE user_id = ? AND created_at LIKE ? ORDER BY created_at',
-            (user_id, date_str + '%'),
+            'WHERE user_id = %s AND created_at >= %s AND created_at < %s '
+            'ORDER BY created_at',
+            (user_id, start, end),
         ).fetchall()
 
+
 def count_today(user_id):
-    prefix = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '%'
+    now = datetime.now(timezone.utc)
+    start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
     with get_connection() as conn:
         row = conn.execute(
             'SELECT COUNT(*) FROM expenses '
-            'WHERE user_id = ? AND created_at LIKE ?',
-            (user_id, prefix),
+            'WHERE user_id = %s AND created_at >= %s AND created_at < %s',
+            (user_id, start, end),
         ).fetchone()
     return row[0]
