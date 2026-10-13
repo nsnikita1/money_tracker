@@ -1,18 +1,20 @@
 import os
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from utils import parse_amount, parse_date, format_money
-from db import init_db, add_expense, get_month_total, get_history, count_today
 
+load_dotenv()
+
+from db import init_db, add_expense, get_month_total, get_history, count_today, DB_NAME
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(name)s: %(message)s', level=logging.INFO)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,16 +89,39 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_error(update, context):
     logging.error('Ошибка в обработчике', exc_info=context.error)
 
+
+async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    with open(DB_NAME, 'rb') as file:
+        await update.message.reply_document(file, filename = 'bot_backup.db')
+
+
+async def daily_backup(context: ContextTypes.DEFAULT_TYPE):
+    with open(DB_NAME, 'rb') as file:
+        await context.bot.send_document(
+            chat_id=ADMIN_ID, document=file, filename='bot_backup.db'
+        )
+
+
 def main():
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('help', help_command))
     app.add_handler(CommandHandler('whoami', whoami))
     app.add_handler(CommandHandler('add', add))
     app.add_handler(CommandHandler('month', month))
     app.add_handler(CommandHandler('history', history))
+    app.add_handler(CommandHandler('backup', backup))
     app.add_error_handler(on_error)
+
+    app.job_queue.run_daily(
+        daily_backup,
+        time = time(hour = 3, tzinfo = timezone.utc),
+    )
+
     app.run_polling()
 
 

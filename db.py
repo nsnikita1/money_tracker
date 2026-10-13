@@ -1,7 +1,10 @@
+import os
 import sqlite3
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 
-DB_NAME = 'bot.db'
+load_dotenv()
+DB_NAME = os.getenv('DB_PATH', 'bot.db')
 
 
 def get_connection():
