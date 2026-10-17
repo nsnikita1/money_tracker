@@ -9,6 +9,7 @@ from utils import parse_amount, parse_date, format_money
 load_dotenv()
 
 from db import init_db, add_expense, get_month_total, get_history, count_today
+
 logging.basicConfig(format='%(asctime)s %(levelname)s %(name)s: %(message)s', level=logging.INFO)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 

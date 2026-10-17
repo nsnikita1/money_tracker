@@ -2,18 +2,14 @@ from datetime import datetime, timezone
 import db
 
 
-def test_users_are_isolated(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, 'DB_NAME', str(tmp_path / 'test.db'))
-    db.init_db()
+def test_users_are_isolated(clean_db):
     db.add_expense(1, 10000, 'еда')
     db.add_expense(2, 5000, 'транспорт')
     assert db.get_month_total(1) == 10000
     assert db.get_month_total(2) == 5000
 
 
-def test_history_only_own(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, 'DB_NAME', str(tmp_path / 'test.db'))
-    db.init_db()
+def test_history_only_own(clean_db):
     db.add_expense(1, 1000, "food")
     db.add_expense(2, 14000, "transport")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
