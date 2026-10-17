@@ -20,6 +20,7 @@ def init_db():
                 amount BIGINT NOT NULL,
                 category TEXT NOT NULL,
                 comment TEXT,
+                type TEXT NOT NULL DEFAULT 'expense',
                 created_at TIMESTAMPTZ NOT NULL
             )
         ''')
@@ -29,12 +30,12 @@ def init_db():
         )
 
 
-def add_expense(user_id, amount, category, comment=''):
+def add_expense(user_id, amount, category, comment='', type='expense'):
     with get_connection() as conn:
         conn.execute(
-            'INSERT INTO expenses (user_id, amount, category, comment, created_at) '
-            'VALUES (%s, %s, %s, %s, %s)',
-            (user_id, amount, category, comment, datetime.now(timezone.utc)),
+            'INSERT INTO expenses (user_id, amount, category, comment, type, created_at) '
+            'VALUES (%s, %s, %s, %s, %s, %s)',
+            (user_id, amount, category, comment, type, datetime.now(timezone.utc)),
         )
 
 
@@ -48,26 +49,39 @@ def month_range(now=None):
     return start, end
 
 
-def get_month_total(user_id):
+def get_month_total(user_id, type='expense'):
     start, end = month_range()
     with get_connection() as conn:
         row = conn.execute(
             'SELECT COALESCE(SUM(amount), 0) FROM expenses '
-            'WHERE user_id = %s AND created_at >= %s AND created_at < %s',
-            (user_id, start, end),
+            'WHERE user_id = %s AND type = %s AND created_at >= %s AND created_at < %s',
+            (user_id, type, start, end),
         ).fetchone()
     return int(row[0])
 
 
-def get_history(user_id, date_str):
+def get_month_balance(user_id):
+    income = get_month_total(user_id, type='income')
+    expense = get_month_total(user_id, type='expense')
+    return income - expense
+
+
+def get_history(user_id, date_str, type=None):
     start = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     end = start + timedelta(days=1)
     with get_connection() as conn:
+        if type is None:
+            return conn.execute(
+                'SELECT amount, category, comment, type, created_at FROM expenses '
+                'WHERE user_id = %s AND created_at >= %s AND created_at < %s '
+                'ORDER BY created_at',
+                (user_id, start, end),
+            ).fetchall()
         return conn.execute(
-            'SELECT amount, category, comment, created_at FROM expenses '
-            'WHERE user_id = %s AND created_at >= %s AND created_at < %s '
+            'SELECT amount, category, comment, type, created_at FROM expenses '
+            'WHERE user_id = %s AND type = %s AND created_at >= %s AND created_at < %s '
             'ORDER BY created_at',
-            (user_id, start, end),
+            (user_id, type, start, end),
         ).fetchall()
 
 
