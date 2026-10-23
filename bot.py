@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from utils import parse_amount, parse_date, format_money
+import subprocess
+import tempfile
 
 load_dotenv()
 
@@ -17,7 +19,7 @@ logging.basicConfig(format='%(asctime)s %(levelname)s %(name)s: %(message)s', le
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
 TOKEN = os.getenv('BOT_TOKEN')
-
+ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Привет! Я бот для учёта трат и доходов.')
@@ -110,6 +112,35 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(line)
     await update.message.reply_text(f'Записи за {date_str}:\n' + '\n'.join(lines))
 
+async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return
+
+    fd, path = tempfile.mkstemp(suffix='.sql')
+    os.close(fd)
+
+    try:
+        result = subprocess.run(
+            ['pg_dump', os.environ['DATABASE_URL'], '-f', path],
+            capture_output=True,
+            text=True,
+            timeout = 60,
+        )
+        if result.returncode != 0:
+            await update.message.reply_text(f'Ошибка бэкапа: {result.stderr[:500]}')
+            return
+
+        with open(path, 'rb') as f:
+            await update.message.reply_document(
+                document=f,
+                filename=f'backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.sql',
+
+            )
+
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
 
 async def on_error(update, context):
     logging.error('Ошибка в обработчике', exc_info=context.error)
@@ -127,6 +158,7 @@ def main():
     app.add_handler(CommandHandler('month', month))
     app.add_handler(CommandHandler('balance', balance))
     app.add_handler(CommandHandler('history', history))
+    app.add_handler(CommandHandler('backup', backup))
     app.add_error_handler(on_error)
 
     app.run_polling()
